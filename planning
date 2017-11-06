@@ -1,0 +1,44 @@
+The main process will do bankers algo
+The child processes will decrement the resources from the shared `allocated_resources`
+
+could have a `process to run register`
+    every process has a process id
+    if the current value of that register is this processe's id, then run in and
+            decrement the resorces
+    when the process is done (either after devrementing the resources or failing 
+            to decrement because there is non avaliable) then the process manager 
+            will start the next process
+
+    this would mean that the process manager needs to keep track of the last 
+            ran process, so it won't run it again
+        if the last process it ran is the only one left, and it can't run it again, 
+                then it needs to exit and say that the allocation can't be done
+
+Steps:
+    Get # of recorces and processes
+    create list for avaliable resorces and populate it
+        (MAKE SURE THAT THIS MEMORY IS SHARED)
+    Get process info and create a process list filled with process structs
+        (iterate through the list and populate until we read `end` from file)
+    create a int or some other data type to contain the value of the id of the 
+            last process that was ran.  
+    Spawn an actual process for each process we populated and pass its node and 
+            the shared `avaliable` recorces into it
+
+    while there are proceses left to be ran
+        if we don't have enough resources left to make any request then we need     
+                to exit the program and state such
+        search through the process list and find the next shortest process with the 
+                closest absolute deadline
+            if that process is making a request and it was the last process to make a request, 
+                    find the next shortest process and run it instead
+            update the process_register 
+            if this was a request, update the last request regiester
+            wait to run the next process
+            decrement all processes relative deadline by the computation time of
+                    the last ran thing
+                    (this could probably be done with another register containing
+                    the excecution time of the last ran job)
+
+
+    

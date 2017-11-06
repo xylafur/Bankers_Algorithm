@@ -1,0 +1,89 @@
+functions:
+
+long populate_resorces_and_processes:
+    funtion that returns the offset of the file and populates resorces and process values
+
+long populate_process_needed(process, file, num_resorces, offset):
+    for(i=0; i<num_resources; i++)
+        process.needed[i] = read_from_file(file)
+    return file_offset
+
+long get_avalibalte_resources(file, offset, avaliable, num_resources):
+    grabs `num_resources` lines from the file, parses them as ints and then 
+    stores them into the avaliable array 
+
+int get_next_resource(file, offset):
+    opens file, grabs next int from a line of form max....
+    returns the max number of resources for that resource for that process
+
+void process_loop(process):
+    while still_more_to_excecute:
+        //should probably add some extra check to ensure that the parent program is still running
+        wait(next_resource)
+        if next_resource == process.id:
+            run_process_decrement_time()
+        signal(next_resource)
+
+void run_process_decrement_time():
+    wait(avaliable)
+    if next_event.type == REQUEST:
+        decrement_avaliable_by_request() 
+    signal(avaliable)
+    signal(process_done)
+
+int enough_resources_avaliable(process):
+    for ammount in request:
+        if ammount > avaliable:
+            return 0
+    return True
+
+void run_process(process):
+    next_process_register = process.id
+    wait(process_done)
+    //the process will increment avalibale
+    
+    //this function needs to update metadata about the process
+    computation_time = process.this_instructions_computation_time
+    process.time_remanind -= computation_time
+    clock += computation_time
+    process.next_instruction++
+    check_if_missed_deadline()
+
+main:
+    clock = 0
+    //these need to be shared memory
+    last_request_register, next_process_register
+    num_processes, num_resources, avaliable_resources
+    offset = populate_resources_and_processes()  
+    process_list = process[num_processes]
+
+    //THIS NEEDS TO BE SHARED MEMORY \/
+    int avaliable_resources [num_resources]
+    offset = get_avaliable_resources(file, offset)
+
+    for process in process_list:
+        process.needed = malloc(sizeof(int) * num_resources)
+        offset = populate_process_needed(&process, file, num_resources, offset) 
+        process_loop(process)
+
+    next_process = -1
+    while there_are_unfinshed_processes:
+        shortest = process_list[0].remaning_time
+        deadline = process_list[0].deaedline
+        chosen_process = process_list[0]
+        found_process = False
+        //this just finds the next valid shortest process
+        for process in process_lsit:
+            if (process.remaning_time < shortest ||
+                process.remaning_time == shortest && process.deadline < deadline)
+               && enough_resources_avaliable(process) && 
+               (last_request = process.id  && this_processes_thing_is_not_request ||
+                last_request != process.id):
+                shortest = process.remaning_time
+                deadline = process.deadline 
+                chosen_process = process
+        if not found_process:
+            throw DeadlockDetectedException()
+       run_process(chosen_process) 
+
+     
