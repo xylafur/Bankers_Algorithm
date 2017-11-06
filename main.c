@@ -283,9 +283,7 @@ int main()
                                 process_list, offset);
     int j, k;
     for(j = 0; j < num_processes; j++){
-        for(k = 0; k < num_processes; k++)
-            printf("%d ", process_list[j].actions[k].computation_time);
-        printf("\n");
+        printf("%d \n", process_list[j].computation_time);
     }
 
     free_processes(process_list, num_processes); 
