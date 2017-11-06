@@ -206,9 +206,9 @@ void append_actions(process_t * process_list, int pid,
         }else if(line_contains(actions[i], "release", 7)){
 
         }else if(line_contains(actions[i], "useresources", 12)){
-            handle_actions(process_list, pid, USERESOURCES, i, actions[i]); 
+            //handle_actions(process_list, pid, USERESOURCES, i, actions[i]); 
         }else if(line_contains(actions[i], "calculate", 9)){
-            handle_actions(process_list, pid, CALCULATE, i, actions[i]); 
+            //handle_actions(process_list, pid, CALCULATE, i, actions[i]); 
         }
     } 
 }
@@ -233,17 +233,21 @@ long populate_processes(char * filename, int num_processes, int num_resources,
         memset(str, 0, sizeof(str));
         fgets(str, sizeof(str), file);
         process_list[i].computation_time = string_to_int(str);
-        char actions [MAX_NUM_ACTIONS] [MAX_STR_LEN]; //arary of strings for next lines
-        int j = 0;
+        char ** actions = calloc(MAX_NUM_ACTIONS, sizeof(char*));
+        int j = 0, k = 0;
         while(1){
             memset(str, 0, sizeof(str));
             fgets(str, sizeof(str), file);
             if(line_contains(str, "end", 3))
                 break;
+            actions[j] = malloc(sizeof(MAX_STR_LEN));
             strcpy(actions[j], str);
             j++; 
         }
-        append_actions(process_list, i, j, (char**)actions);
+        append_actions(process_list, i, j, actions);
+        for(k = 0; k < j; k++)
+            free(actions[j]);
+        free(actions);
     }
     offset = ftell(file);
     fclose(file);
@@ -277,7 +281,12 @@ int main()
     printf("\n");
     offset = populate_processes(filename, num_processes, num_resources,
                                 process_list, offset);
-
+    int j, k;
+    for(j = 0; j < num_processes; j++){
+        for(k = 0; k < num_processes; k++)
+            printf("%d ", process_list[j].actions[k].computation_time);
+        printf("\n");
+    }
 
     free_processes(process_list, num_processes); 
     return 0;
