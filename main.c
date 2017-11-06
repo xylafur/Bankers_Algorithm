@@ -141,13 +141,14 @@ int get_int_between_paren(char * str)
     return num;
 }
 
-void populate_action_resources(char * str, int * resources)
+void populate_action_resources(char * str, process_t * process_list, 
+                               int pid, int action_id)
 {
     int i = 0, num = 0, found_parenth = 0, cur_res = 0; 
     while(str[i] != '\0' && str[i] != '\n'){
         if(found_parenth){
             if(str[i] == ','){
-                resources[cur_res] = num;
+                process_list[pid].actions[action_id].resources[cur_res] = num;
                 num = 0;
                 cur_res++;
             }else if(str[i] == ')')
@@ -178,7 +179,7 @@ void handle_actions(process_t * process_list, int pid, action_e action_type,
             process_list[pid].actions[action_index].resources = malloc(        \
                     sizeof(int) * num_resources);
             populate_action_resources(str,                                     \
-                    process_list[pid].actions[action_index].resources); 
+                    process_list, pid, action_index); 
             return;
 
         case CALCULATE:
@@ -202,13 +203,13 @@ void append_actions(process_t * process_list, int pid,
     int i;
     for(i = 0; i < num_actions; i++){
         if(line_contains(actions[i], "request", 7)){
-        
+            handle_actions(process_list, pid, REQUEST, i, actions[i]); 
         }else if(line_contains(actions[i], "release", 7)){
-
+            handle_actions(process_list, pid, RELEASE, i, actions[i]); 
         }else if(line_contains(actions[i], "useresources", 12)){
-            //handle_actions(process_list, pid, USERESOURCES, i, actions[i]); 
+            handle_actions(process_list, pid, USERESOURCES, i, actions[i]); 
         }else if(line_contains(actions[i], "calculate", 9)){
-            //handle_actions(process_list, pid, CALCULATE, i, actions[i]); 
+            handle_actions(process_list, pid, CALCULATE, i, actions[i]); 
         }
     } 
 }
@@ -283,7 +284,16 @@ int main()
                                 process_list, offset);
     int j, k;
     for(j = 0; j < num_processes; j++){
-        printf("%d \n", process_list[j].computation_time);
+        for(k = 0; k < process_list[j].num_actions; k++){
+            printf("\tactions type: %d ", (int)process_list[j].actions[k].action);
+            if(process_list[j].actions[k].action == REQUEST ||
+               process_list[j].actions[k].action == RELEASE)
+            printf("\t\tresources: %d %d %d", process_list[j].actions[k].resources[0],  
+                                              process_list[j].actions[k].resources[1],  
+                                              process_list[j].actions[k].resources[2]); 
+            printf("\n");
+        }
+        printf("computation time: %d \n", process_list[j].computation_time);
     }
 
     free_processes(process_list, num_processes); 
