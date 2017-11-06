@@ -147,17 +147,20 @@ void populate_action_resources(char * str, process_t * process_list,
     int i = 0, num = 0, found_parenth = 0, cur_res = 0; 
     while(str[i] != '\0' && str[i] != '\n'){
         if(found_parenth){
-            if(str[i] == ','){
+            if(str[i] == ',' || str[i] == ')'){
                 process_list[pid].actions[action_id].resources[cur_res] = num;
                 num = 0;
                 cur_res++;
-            }else if(str[i] == ')')
-                break;
-            else{
+                if(str[i] == ')')
+                    break;
+            }else{
                 num *= 10;
                 num += str[i] - '0';
             }
-        } 
+        }else{
+            if(str[i] == '(')
+                found_parenth = 1; 
+        }
         i++;
     }
 }
