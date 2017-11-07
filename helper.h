@@ -10,12 +10,4 @@ int string_to_int(char * str)
     }
     return val;
 }
-
-void store_file_in_buffer(char * filename, char * buf)
-{
-    char cur;
-    while(1)
-        break;
-}
-
 #endif

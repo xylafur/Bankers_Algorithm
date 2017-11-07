@@ -1,9 +1,14 @@
 #include <stdio.h>
-#include <ctype.h>
 #include "process.h"
 #include "manager.h"
 #include "helper.h"
 #include <string.h>
+#include <ctype.h>
+#include <unistd.h>
+
+#include <sys/mman.h>
+#include <sys/types.h>
+#include <semaphore.h>
 
 #define MAX_STR_LEN 1024 
 
@@ -13,11 +18,28 @@
  */
 #define MAX_NUM_ACTIONS 256 
 
-/*  memory maps our global variables that need to be shared across all processes
- */
-void make_variables_shared()
-{
+/*  Our global, shared varaibles */
+int * clock = 0;
+int * last_request = 0;
+int * avaliable = 0;
+sem_t *avaliable_sem, *last_request_sem, *clock_sem;
 
+/*could have been done as a function but decided this was best*/
+#define dealoc_shared_variables() do{munmap(clock, sizeof(int));\
+                                     munmap(last_request, sizeof(int));}while(0);
+
+inline void make_variables_shared()
+{
+    clock = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, 
+                 MAP_SHARED | MAP_ANONYMOUS, -1, 0); 
+    last_request = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, 
+                        MAP_SHARED | MAP_ANONYMOUS, -1, 0); 
+    avaliable_sem = mmap(NULL, sizeof(sem_t), PROT_READ | PROT_WRITE, 
+                         MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    last_request_sem = mmap(NULL, sizeof(sem_t), PROT_READ | PROT_WRITE, 
+                            MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    clock_sem = mmap(NULL, sizeof(sem_t), PROT_READ | PROT_WRITE, 
+                     MAP_SHARED | MAP_ANONYMOUS, -1, 0);
 }
 
 /*  Funtion that will set two ints, num proc and num resourc and will return a
@@ -170,8 +192,7 @@ void populate_action_resources(char * str, process_t * process_list,
 void handle_actions(process_t * process_list, int pid, action_e action_type, 
                     int action_index, char * str)
 {
-    int val, num_resources = process_list[pid].num_resources, 
-        resources [num_resources];
+    int val, num_resources = process_list[pid].num_resources; 
     
     process_list[pid].actions[action_index].action = action_type;
     switch(action_type){
@@ -258,47 +279,52 @@ long populate_processes(char * filename, int num_processes, int num_resources,
     return offset; 
 }
 
-
-/*  Our global, shared varaibles */
-int clock = 0;
-int last_request = -1;
-
-int main()
+void test_fork(int pid)
 {
-    int i;
+    sem_wait(avaliable_sem);
+    printf("avaliable[0] = %d\n", avaliable[0]);
+    avaliable[0] = 5;
+    sem_post(avaliable_sem);
+}
+
+
+int main(int argc, char * argv [])
+{
     char * filename = "sample-input1.txt";
+    if(argc >= 2)
+        filename = argv[1];
     int num_processes = 0, num_resources = 0;
     long offset = get_proc_and_resc(filename, &num_processes, &num_resources);
     
     //populate avaliabnle resources
-    int avaliable [num_resources];//this also needs to be shared
+    avaliable = mmap(NULL, sizeof(int) * num_resources, 
+                           PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, 
+                           -1, 0);
     offset = get_avaliable_resources(filename, num_resources, avaliable, offset);
 
     process_t process_list [num_processes];
     offset = populate_process_needed(filename, num_processes, process_list, 
                                      num_resources, avaliable, offset);
-
-    printf("processes: %d\tresources: %d\n", num_processes, num_resources);
-    printf("avaliable: ");
-    for(i = 0; i < num_resources; i++)
-        printf("%d ", avaliable[i]);
-    printf("\n");
     offset = populate_processes(filename, num_processes, num_resources,
                                 process_list, offset);
-    int j, k;
-    for(j = 0; j < num_processes; j++){
-        for(k = 0; k < process_list[j].num_actions; k++){
-            printf("\tactions type: %d ", (int)process_list[j].actions[k].action);
-            if(process_list[j].actions[k].action == REQUEST ||
-               process_list[j].actions[k].action == RELEASE)
-            printf("\t\tresources: %d %d %d", process_list[j].actions[k].resources[0],  
-                                              process_list[j].actions[k].resources[1],  
-                                              process_list[j].actions[k].resources[2]); 
-            printf("\n");
-        }
-        printf("computation time: %d \n", process_list[j].computation_time);
+    make_variables_shared(); 
+    
+    sem_init(avaliable_sem, 1, 1);
+    //sem_init(&last_request_sem, 1, 1);
+    //sem_init(&clock_sem, 1, 1);
+
+    //RUN BANKERS ALGO
+    int pid = fork();
+    if(pid == 0){
+        test_fork(pid); 
+    }else{
+        test_fork(pid);
+        exit(0);
     }
 
+    dealoc_shared_variables();
     free_processes(process_list, num_processes); 
+    munmap(avaliable, sizeof(int) * num_resources);
+
     return 0;
 }

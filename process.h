@@ -2,7 +2,9 @@
     #define PROCESS_HEADER
 #include <stdlib.h>
 
+/*Even though freeing a null ptr is supposed to be safe*/
 #define CHECK_AND_FREE(ptr) do{if(ptr)free(ptr);}while(0);
+
 enum action{ //enum representing actions a process can take
     REQUEST,
     RELEASE,
