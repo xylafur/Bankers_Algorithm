@@ -28,7 +28,7 @@ sem_t *avaliable_sem, *last_request_sem, *clock_sem;
 #define dealoc_shared_variables() do{munmap(clock, sizeof(int));\
                                      munmap(last_request, sizeof(int));}while(0);
 
-inline void make_variables_shared()
+void inline make_variables_shared()
 {
     clock = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, 
                  MAP_SHARED | MAP_ANONYMOUS, -1, 0); 
@@ -243,9 +243,9 @@ void append_actions(process_t * process_list, int pid,
 long populate_processes(char * filename, int num_processes, int num_resources,
                         process_t * process_list, long offset)
 {
+    int i;
     FILE * file = fopen(filename, "r");
     fseek(file, offset, SEEK_SET);
-    int i;
     char str [MAX_STR_LEN];
     for(i = 0; i < num_processes; i++){
         while(1){//loop until we find line of form process_[\d+]
@@ -290,6 +290,7 @@ void test_fork(int pid)
 
 int main(int argc, char * argv [])
 {
+    int pid;
     char * filename = "sample-input1.txt";
     if(argc >= 2)
         filename = argv[1];
@@ -314,7 +315,7 @@ int main(int argc, char * argv [])
     //sem_init(&clock_sem, 1, 1);
 
     //RUN BANKERS ALGO
-    int pid = fork();
+    pid = fork();
     if(pid == 0){
         test_fork(pid); 
     }else{
