@@ -21,12 +21,13 @@
 /*  Our global, shared varaibles */
 int * clock = 0;
 int * last_request = 0;
+int * which_process = 0;    /*whos turn is it to run*/
 int * avaliable = 0;            /*size */
 int * current_request = 0;      /*size n + 1, represents either request 
                                   or release and the ammount*/
 process_t * process_list;
 
-sem_t *avaliable_sem, *last_request_sem, *clock_sem;
+sem_t *avaliable_sem, *last_request_sem, *clock_sem, *which_process_sem;
 
 int num_resources, num_processes;
 
@@ -41,7 +42,8 @@ void make_variables_shared()
                      MAP_SHARED | MAP_ANONYMOUS, -1, 0); 
     current_request = mmap(NULL, sizeof(int) * (num_resources+1), PROT_READ | PROT_WRITE, 
                            MAP_SHARED | MAP_ANONYMOUS, -1, 0); 
-
+    which_process = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, 
+                         MAP_SHARED | MAP_ANONYMOUS, -1, 0); 
     
     avaliable_sem = mmap(NULL, sizeof(sem_t), PROT_READ | PROT_WRITE, 
                          MAP_SHARED | MAP_ANONYMOUS, -1, 0);
@@ -49,6 +51,9 @@ void make_variables_shared()
                             MAP_SHARED | MAP_ANONYMOUS, -1, 0);
     clock_sem = mmap(NULL, sizeof(sem_t), PROT_READ | PROT_WRITE, 
                      MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    which_process_sem = mmap(NULL, sizeof(sem_t), PROT_READ | PROT_WRITE, 
+                             MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+
 }
 
 void dealoc_shared_variables()
@@ -58,11 +63,12 @@ void dealoc_shared_variables()
     munmap(avaliable, sizeof(int)*num_resources);
     munmap(current_request, sizeof(int)*(num_resources+1));
     munmap(process_list, sizeof(process_t)*num_processes);
-
+    munmap(which_process, sizeof(process_t));
 
     munmap(avaliable_sem, sizeof(sem_t));
     munmap(last_request_sem, sizeof(sem_t));
     munmap(clock_sem, sizeof(sem_t));
+    munmap(which_process_sem, sizeof(sem_t));
 }
 
 /*  Funtion that will set two ints, num proc and num resourc and will return a
@@ -310,6 +316,27 @@ void test_fork(int pid)
     sem_post(avaliable_sem);
 }
 
+void subtract_list(int * list1, int * list2, int size)
+{
+    int i;
+    for(i = 0; i < size; i++)
+        list1[i] -= list2[i];
+}
+
+void run_child_process(int id)
+{
+    sem_wait(which_process_sem);
+    if(*which_process == id){
+        //need to test if I can assign a pointer to this process
+        //from the process list to another variable for convienicence 
+        //switch(process_list[id].
+        //subtract_list(avaliable, 
+        //printf("my turn!\n");
+    }
+    printf("child %d\n", id);
+    sem_post(which_process_sem);
+}
+
 void bankers_algorithm(process_t * process_list)
 {
     /*
@@ -349,7 +376,11 @@ void bankers_algorithm(process_t * process_list)
         if(pid != 0)
             break;
     }
-    printf("%d\n", i);
+    if(pid == 0){
+    
+    }else{
+        run_child_process(i); 
+    }
 }
 
 int main(int argc, char * argv [])
@@ -376,8 +407,9 @@ int main(int argc, char * argv [])
     make_variables_shared(); 
     
     sem_init(avaliable_sem, 1, 1);
-    //sem_init(&last_request_sem, 1, 1);
-    //sem_init(&clock_sem, 1, 1);
+    sem_init(which_process_sem, 1, 1);
+    sem_init(last_request_sem, 1, 1);
+    sem_init(clock_sem, 1, 1);
 
     bankers_algorithm(process_list);    
 
