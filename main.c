@@ -21,25 +21,48 @@
 /*  Our global, shared varaibles */
 int * clock = 0;
 int * last_request = 0;
-int * avaliable = 0;
+int * avaliable = 0;            /*size */
+int * current_request = 0;      /*size n + 1, represents either request 
+                                  or release and the ammount*/
+process_t * process_list;
+
 sem_t *avaliable_sem, *last_request_sem, *clock_sem;
 
-/*could have been done as a function but decided this was best*/
-#define dealoc_shared_variables() do{munmap(clock, sizeof(int));\
-                                     munmap(last_request, sizeof(int));}while(0);
+int num_resources, num_processes;
 
-void inline make_variables_shared()
+
+void make_variables_shared()
 {
     clock = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, 
                  MAP_SHARED | MAP_ANONYMOUS, -1, 0); 
     last_request = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, 
                         MAP_SHARED | MAP_ANONYMOUS, -1, 0); 
+    avaliable = mmap(NULL, sizeof(int) * num_resources, PROT_READ | PROT_WRITE, 
+                     MAP_SHARED | MAP_ANONYMOUS, -1, 0); 
+    current_request = mmap(NULL, sizeof(int) * (num_resources+1), PROT_READ | PROT_WRITE, 
+                           MAP_SHARED | MAP_ANONYMOUS, -1, 0); 
+
+    
     avaliable_sem = mmap(NULL, sizeof(sem_t), PROT_READ | PROT_WRITE, 
                          MAP_SHARED | MAP_ANONYMOUS, -1, 0);
     last_request_sem = mmap(NULL, sizeof(sem_t), PROT_READ | PROT_WRITE, 
                             MAP_SHARED | MAP_ANONYMOUS, -1, 0);
     clock_sem = mmap(NULL, sizeof(sem_t), PROT_READ | PROT_WRITE, 
                      MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+}
+
+void dealoc_shared_variables()
+{
+    munmap(clock, sizeof(int));
+    munmap(last_request, sizeof(int));
+    munmap(avaliable, sizeof(int)*num_resources);
+    munmap(current_request, sizeof(int)*(num_resources+1));
+    munmap(process_list, sizeof(process_t)*num_processes);
+
+
+    munmap(avaliable_sem, sizeof(sem_t));
+    munmap(last_request_sem, sizeof(sem_t));
+    munmap(clock_sem, sizeof(sem_t));
 }
 
 /*  Funtion that will set two ints, num proc and num resourc and will return a
@@ -287,14 +310,54 @@ void test_fork(int pid)
     sem_post(avaliable_sem);
 }
 
+void bankers_algorithm(process_t * process_list)
+{
+    /*
+ *  parent process;
+ *      find the shortest process
+ *      check if its finished, 
+ *          if it is, find next shortest process and see if it is finished
+ *          if all processes are finished exit
+ *      see what the process wants to do, if its a request, check if it was the last request
+ *          if it did make the last request, find the next shortest valid process
+ *          unless this is the only process left or none of the other requests are possible
+ *              in that case run this process
+ *      if its not a request, or it is a request and this wasn't the last 
+ *              process to make a request run until you hit two requests
+ *      update the avaliable and clock registers
+ *
+ *  child processes
+ *      check if it is your turn to run using semaphore
+ *      if it is your turn
+ *          change the request register to indicate to the parent process what you want to do
+ *          check what the parent process returned
+ *              a leading 0 in the array indicates sucess, -1 indicates that a 
+ *              request couldn't be made
+ *          after every succesfully ran request, remember to increment
+ *                  the process's action counter
+ *              if the action counter is greater than the number of actions 
+ *                      mark the process as finished
+ *      once a request can't be made set the first element in the request 
+ *              register to the total time taken to run commands
+ *      signal semaphores
+ *      
+ */ 
+
+    int pid, i;
+    for(i=0; i < num_processes; i++){//spawn all child processes
+        pid = fork(); 
+        if(pid != 0)
+            break;
+    }
+    printf("%d\n", i);
+}
 
 int main(int argc, char * argv [])
 {
-    int pid;
     char * filename = "sample-input1.txt";
     if(argc >= 2)
         filename = argv[1];
-    int num_processes = 0, num_resources = 0;
+    num_processes = 0, num_resources = 0;
     long offset = get_proc_and_resc(filename, &num_processes, &num_resources);
     
     //populate avaliabnle resources
@@ -303,7 +366,9 @@ int main(int argc, char * argv [])
                            -1, 0);
     offset = get_avaliable_resources(filename, num_resources, avaliable, offset);
 
-    process_t process_list [num_processes];
+    process_list = mmap(NULL, sizeof(process_t) * (num_processes), PROT_READ | PROT_WRITE, 
+                           MAP_SHARED | MAP_ANONYMOUS, -1, 0); 
+
     offset = populate_process_needed(filename, num_processes, process_list, 
                                      num_resources, avaliable, offset);
     offset = populate_processes(filename, num_processes, num_resources,
@@ -314,17 +379,10 @@ int main(int argc, char * argv [])
     //sem_init(&last_request_sem, 1, 1);
     //sem_init(&clock_sem, 1, 1);
 
-    //RUN BANKERS ALGO
-    pid = fork();
-    if(pid == 0){
-        test_fork(pid); 
-    }else{
-        test_fork(pid);
-        exit(0);
-    }
+    bankers_algorithm(process_list);    
 
-    dealoc_shared_variables();
     free_processes(process_list, num_processes); 
+    dealoc_shared_variables();
     munmap(avaliable, sizeof(int) * num_resources);
 
     return 0;
