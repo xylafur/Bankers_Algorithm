@@ -12,6 +12,8 @@
 
 #define MAX_STR_LEN 1024 
 
+#define DEBUG(MSG) printf("%s\n", MSG)
+
 /*  just a constant for the max number of actions for a process that my program 
  *  will accept, did it this way to avoid too much dynamic allocation.
  *  Why use more than the stack when thats all you need?
@@ -27,9 +29,10 @@ int * current_request = 0;      /*size n + 1, represents either request
                                   or release and the ammount*/
 process_t * process_list;
 
-sem_t *avaliable_sem, *last_request_sem, *clock_sem, *which_process_sem;
+sem_t *current_request_sem, *wait_response_sem, *clock_sem, *which_process_sem;
 
 int num_resources, num_processes;
+
 
 
 void make_variables_shared()
@@ -45,9 +48,9 @@ void make_variables_shared()
     which_process = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, 
                          MAP_SHARED | MAP_ANONYMOUS, -1, 0); 
     
-    avaliable_sem = mmap(NULL, sizeof(sem_t), PROT_READ | PROT_WRITE, 
+    current_request_sem = mmap(NULL, sizeof(sem_t), PROT_READ | PROT_WRITE, 
                          MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-    last_request_sem = mmap(NULL, sizeof(sem_t), PROT_READ | PROT_WRITE, 
+    wait_response_sem = mmap(NULL, sizeof(sem_t), PROT_READ | PROT_WRITE, 
                             MAP_SHARED | MAP_ANONYMOUS, -1, 0);
     clock_sem = mmap(NULL, sizeof(sem_t), PROT_READ | PROT_WRITE, 
                      MAP_SHARED | MAP_ANONYMOUS, -1, 0);
@@ -65,8 +68,8 @@ void dealoc_shared_variables()
     munmap(process_list, sizeof(process_t)*num_processes);
     munmap(which_process, sizeof(process_t));
 
-    munmap(avaliable_sem, sizeof(sem_t));
-    munmap(last_request_sem, sizeof(sem_t));
+    munmap(current_request_sem, sizeof(sem_t));
+    munmap(wait_response_sem, sizeof(sem_t));
     munmap(clock_sem, sizeof(sem_t));
     munmap(which_process_sem, sizeof(sem_t));
 }
@@ -284,6 +287,7 @@ long populate_processes(char * filename, int num_processes, int num_resources,
         }
         fgets(str, sizeof(str), file);
         process_list[i].deadline = string_to_int(str); 
+        process_list[i].finished = 0;
         memset(str, 0, sizeof(str));
         fgets(str, sizeof(str), file);
         process_list[i].computation_time = string_to_int(str);
@@ -310,10 +314,10 @@ long populate_processes(char * filename, int num_processes, int num_resources,
 
 void test_fork(int pid)
 {
-    sem_wait(avaliable_sem);
+    sem_wait(current_request_sem);
     printf("avaliable[0] = %d\n", avaliable[0]);
     avaliable[0] = 5;
-    sem_post(avaliable_sem);
+    sem_post(current_request_sem);
 }
 
 void subtract_list(int * list1, int * list2, int size)
@@ -325,16 +329,95 @@ void subtract_list(int * list1, int * list2, int size)
 
 void run_child_process(int id)
 {
-    sem_wait(which_process_sem);
-    if(*which_process == id){
-        //need to test if I can assign a pointer to this process
-        //from the process list to another variable for convienicence 
-        //switch(process_list[id].
-        //subtract_list(avaliable, 
-        //printf("my turn!\n");
+    process_t * self;
+    self = &process_list[id];
+
+    while(!self->finished){ 
+        sem_wait(which_process_sem);
+        DEBUG("GRANTED WHICH PROCESS SEM IN CHILD");
+        printf("which process: %d\n", *which_process);
+        if(*which_process == id && !process_list[id].finished){
+            DEBUG("RUNNING THIS PROCESS");
+            int i;
+                    switch(self->actions[self->next_action].action){
+                /*  Populate the current_request register with the correct values
+                 */
+                case REQUEST:
+                    current_request[0] = (int)REQUEST;
+                    for(i=0; i < self->num_resources; i++)
+                        current_request[i+1] = \
+                            self->actions[self->next_action].resources[i];
+                    break;
+                case RELEASE:
+                    current_request[0] = (int)RELEASE;
+                    for(i=0; i < self->num_resources; i++)
+                        current_request[i+1] = \
+                            self->actions[self->next_action].resources[i];
+                    break;
+                case CALCULATE:
+                    current_request[0] = (int)CALCULATE;
+                    break;
+                case USERESOURCES:
+                    current_request[0] = (int)USERESOURCES;
+                    break;
+            }
+            sem_post(current_request_sem);
+            DEBUG("POSTED CURRENT REQUEST, WAITING ON RESPONSE");
+
+            sem_wait(wait_response_sem);/*waits until the parent has responded*/
+            DEBUG("GOT RESPONSE FROM PARENT");
+            if(current_request[i] != 0){
+                /*our action was run succesfully by parent*/    
+                sem_wait(clock_sem);
+                clock += self->actions[self->next_action].computation_time;
+                sem_post(clock_sem);
+                self->next_action++;
+            }
+            if(self->next_action >= self->num_actions)
+                self->finished = 1;
+            DEBUG("FINISHED RUNNING CHILD");
+        }
+        printf("child %d\n", id);
+        sem_post(which_process_sem);
+        //if this process_t is done, we can kill the actual linux process
+        if(process_list[id].finished)
+            exit(0);
     }
-    printf("child %d\n", id);
-    sem_post(which_process_sem);
+}
+
+/*  Finds the next valid shortest process, returns -1 if all processes are 
+ *  finished
+ */
+int find_shortest(int ignore)
+{
+    int shortest = -1, i;
+    for(i = 0; i < num_processes; i++){
+        if(process_list[i].finished)
+            continue;
+        if(ignore > 0 && i == ignore)
+            continue;
+        if(shortest == -1){
+            shortest = i;
+        }
+        if(process_list[i].computation_time < \
+           process_list[shortest].computation_time)
+            shortest = i;
+        else if(process_list[i].computation_time == \
+                process_list[shortest].computation_time && 
+                process_list[i].deadline < process_list[shortest].deadline)
+            shortest = i;
+    }
+    return shortest;
+}
+
+int check_valid_request()
+{
+    int i;
+    for(i = 0; i < num_resources; i++){
+        if(current_request[i+1] > avaliable[i])
+            return 0;    
+    }
+    return 1;
 }
 
 void bankers_algorithm(process_t * process_list)
@@ -371,13 +454,66 @@ void bankers_algorithm(process_t * process_list)
  */ 
 
     int pid, i;
+    *which_process = -1;
     for(i=0; i < num_processes; i++){//spawn all child processes
         pid = fork(); 
         if(pid != 0)
             break;
     }
     if(pid == 0){
-    
+        DEBUG("IN PARENT AT BEGINNING");
+        int shortest = find_shortest(-1), i;
+        while(shortest >= 0){
+            printf("shortest: %d\n", shortest);
+            /*let the process know its his turn*/
+            sem_wait(which_process_sem);
+            *which_process = shortest;
+            sem_post(which_process_sem);
+
+            DEBUG("WAITING FOR CURRENT REQUEST PARENT");
+            /*wait for the child to make it's request*/
+            sem_wait(current_request_sem);
+            DEBUG("AFTER WAITING FOR CURRENT REQUEST IN PARENT");
+            action_e action = (action_e)current_request[0];
+            int temp_shortest;
+            DEBUG("BEFORE PARENT SWITCH");printf("action: %d\n", (int)action);
+            switch(action){/*determine how to respond to request*/
+                case REQUEST:
+                    if(*last_request == shortest){
+                    /*if this is a request and this was the last process to 
+                     *make a request        */
+                        temp_shortest = find_shortest(shortest);
+                        if(temp_shortest >= 0){
+                            current_request[0] = -1;
+                            shortest = temp_shortest;
+                            sem_post(wait_response_sem);
+                            continue;
+                        }
+                    } 
+                    if(check_valid_request()){
+                        for(i = 0; i < num_processes; i++) 
+                            avaliable[i] -= current_request[i+1];
+                    }else{
+                        current_request[0] = -1;
+                        shortest = find_shortest(shortest);  
+                        sem_post(wait_response_sem);
+                        continue;
+                    } 
+                    current_request[0] = 1;
+                    *last_request = shortest;
+                    break;
+                case RELEASE:
+                    for(i = 0; i < num_processes; i++) 
+                        avaliable[i] += current_request[i+1];
+                    break;
+                case CALCULATE:
+                case USERESOURCES:
+                    break;
+            }
+            sem_post(wait_response_sem);
+            DEBUG("OUTSIDE SWITCH");
+        }
+        //find shortest process 
     }else{
         run_child_process(i); 
     }
@@ -405,12 +541,14 @@ int main(int argc, char * argv [])
     offset = populate_processes(filename, num_processes, num_resources,
                                 process_list, offset);
     make_variables_shared(); 
+    *last_request = -1;
     
-    sem_init(avaliable_sem, 1, 1);
+    sem_init(current_request_sem, 1, 0);
     sem_init(which_process_sem, 1, 1);
-    sem_init(last_request_sem, 1, 1);
+    sem_init(wait_response_sem, 1, 0);
     sem_init(clock_sem, 1, 1);
-
+    
+    DEBUG("Before calling bankers");
     bankers_algorithm(process_list);    
 
     free_processes(process_list, num_processes); 
