@@ -4,6 +4,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <unistd.h>
+#include "debug.h"
 
 #include <sys/mman.h>
 #include <sys/types.h>
@@ -238,5 +239,111 @@ void print_system_state()
     for(i = 0; i < num_processes; i++)
         print_process(i);
 }
+
+/*  Returns a bool wether or not this is a valid request
+ */
+int check_request_valid()
+{
+    if(*last_request == *which_process)
+        return 0;
+    int i;
+    for(i = 0; i < num_resources; i++)
+        if(avaliable[i] < current_request[i+1])
+            return 0;
+    return 1;
+}
+
+void perform_request()
+{
+    int i;
+    for(i = 0; i < num_resources; i++)
+        avaliable[i] -= current_request[i+1];
+    *last_request = *which_process;
+}
+
+void perform_release()
+{
+    int i;
+    for(i = 0; i < num_resources; i++)
+        avaliable[i] += current_request[i+1];
+}
+
+/*  Fucntion called by parent process, determinecs if the request is a valid 
+ *  one.  If it is it will make the request. 
+ *  Returns the status of the request, 1 for success 0 for failure
+ */
+int parent_handle_request()
+{
+    int st;
+    DEBUG_PARENT("Figuring out how to handle current request")
+    action_e action = (action_e)current_request[0];
+    switch(action){
+        case REQUEST:
+            if(check_request_valid()){
+                DEBUG_PARENT("We have marked this as a valid request")
+                perform_request();
+                st = 1;                
+            }else{
+                DEBUG_PARENT("That was an invalid request")
+                st = 0;
+            } 
+            break;
+        case RELEASE:
+            DEBUG_PARENT("Performing a release")
+            perform_release();
+            st = 1; 
+            break;
+        default:
+            st = 1;
+    }
+    return st;
+}
+
+int all_processes_finished()
+{
+    int i;
+    for(i = 0; i < num_processes; i++)
+        if(!process_list[i].finished)
+            return 0;
+    return 1;
+}
+
+int get_process_laxity(int id)
+{
+    int deadline, computation_time, time_computed;
+    deadline = process_list[id].deadline;
+    computation_time = process_list[id].computation_time;
+    time_computed = process_list[id].time_computed;
+    return deadline - (computation_time - time_computed);
+}
+
+/*  Function to find the process with least laxity
+ */
+int least_laxity(int ignore)
+{
+    int least = -1, i;
+    int laxity, least_laxity;
+    for(i = 0; i < num_processes; i++){
+        if(process_list[i].finished)
+            continue;
+        if(ignore >= 0 && ignore == i)
+            continue;
+        if(least == -1){
+            least = i;
+            least_laxity = get_process_laxity(i);
+            continue;
+        } 
+        laxity = get_process_laxity(i);
+        if(laxity < least_laxity){
+            least = i;
+            least_laxity = laxity;
+        }else if(laxity == least_laxity && process_list[least].deadline > \
+                                           process_list[i].deadline){
+            least = i;
+            least_laxity = laxity;
+        }
+    }
+    return least;
+} 
 
 #endif

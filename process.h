@@ -30,6 +30,7 @@ struct process{
 
     int deadline;
     int computation_time;
+    int time_computed;
 
     int num_resources;
     int * allocated_resources;
