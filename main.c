@@ -33,15 +33,17 @@ void run_child_process(int id)
                 increment_clock(self);  
                 handle_allocated_resources(self);
                 self->next_action++;
-                if(self->next_action >= self->num_actions)
+                if(self->next_action >= self->num_actions){
                     self->finished = 1;
+                    self->finishing_time = get_clock();
+                }
             }
             DEBUG_CHILD("Process finished, signalling\n")
             /*need to signal to the parent that we are done for now at least*/
             sem_post(process_finished_sem);
         }
     }
-
+    exit(0);
 }
 
 /*  Returns a bool wether or not this is a valid request
@@ -155,7 +157,8 @@ void SPF_bankers(process_t * process_list)
             /*if this was a valid request, we need to find the next process*/
             if(st)
                 shortest = find_shortest(-1);
-            break;
+            if(all_processes_finished())
+                break;
         }
     }else{
         run_child_process(i); 

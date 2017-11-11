@@ -26,6 +26,7 @@ struct process_actions{
 struct process{
     int pid;/*this is a custom pid and not the unix pid*/
     int finished;
+    int finishing_time;
 
     int deadline;
     int computation_time;

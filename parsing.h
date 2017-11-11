@@ -116,7 +116,7 @@ int get_int_between_paren(char * str)
             if(str[i] == ')')
                 break;
             num*=10;
-            num+= str[i] = '0';
+            num+= str[i] - '0';
         }
         if(str[i] == '(')
             found_parenth = 1;

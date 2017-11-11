@@ -213,8 +213,10 @@ void print_process(int id)
     printf("]\n");
     clock_time = get_clock();
     printf("This process has a deadline of: %d\n", process_list[id].deadline);
-    if(clock_time > process_list[id].deadline)
-        printf("\tThis process has missed it's deadline\n");
+    if(process_list[id].finished && process_list[id].deadline < \
+                                    process_list[id].finishing_time)
+        printf("\tThis process has missed it's deadline, it finished at: %d\n", 
+               process_list[id].finishing_time);
     else
         printf("\tThis process has not missed its deadline at this time\n");
 }
