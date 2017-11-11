@@ -13,6 +13,12 @@
 #include <sys/types.h>
 #include <semaphore.h>
 
+int debug_on = 1;
+
+#define DEBUG_PARENT(MSG) if(debug_on){printf("PARENT: %s\n", MSG);}
+#define DEBUG_CHILD(MSG) if(debug_on){printf("CHILD: %s\n", MSG);}
+
+
 void print_process_info()
 {
     int i;
@@ -20,5 +26,8 @@ void print_process_info()
 
     }
 }
+
+
+
 
 #endif
