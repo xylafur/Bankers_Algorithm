@@ -2,6 +2,7 @@
 #include "process.h"
 #include "manager.h"
 #include "helper.h"
+#include "debug.h"
 #include "parsing.h"
 #include <string.h>
 #include <ctype.h>
@@ -12,7 +13,9 @@
 #include <semaphore.h>
 
 
-#define DEBUG(MSG) printf("%s\n", MSG)
+#define DEBUG_PARENT(MSG) printf("PARENT: %s\n", MSG)
+#define DEBUG_CHILD(MSG) printf("CHILD: %s\n", MSG)
+
 
 void run_child_process(int id)
 {
@@ -21,10 +24,10 @@ void run_child_process(int id)
 
     while(!self->finished){ 
         sem_wait(which_process_sem);
-        DEBUG("GRANTED WHICH PROCESS SEM IN CHILD");
-        printf("which process: %d\n", *which_process);
-        if(*which_process == id && !process_list[id].finished){
-            DEBUG("RUNNING THIS PROCESS");
+        int chosen = *which_process; 
+        sem_post(which_process_sem);
+        if(chosen == id && !process_list[id].finished){
+            DEBUG_CHILD("RUNNING THIS PROCESS");printf("\tprocess: %d\taction: %d\n", id, self->next_action);
             int i;
                     switch(self->actions[self->next_action].action){
                 /*  Populate the current_request register with the correct values
@@ -49,10 +52,10 @@ void run_child_process(int id)
                     break;
             }
             sem_post(current_request_sem);
-            DEBUG("POSTED CURRENT REQUEST, WAITING ON RESPONSE");
+            DEBUG_CHILD("POSTED CURRENT REQUEST, WAITING ON RESPONSE");
 
             sem_wait(wait_response_sem);/*waits until the parent has responded*/
-            DEBUG("GOT RESPONSE FROM PARENT");
+            DEBUG_CHILD("GOT RESPONSE FROM PARENT");
             if(current_request[i] != 0){
                 /*our action was run succesfully by parent*/    
                 sem_wait(clock_sem);
@@ -62,17 +65,14 @@ void run_child_process(int id)
             }
             if(self->next_action >= self->num_actions)
                 self->finished = 1;
-            DEBUG("FINISHED RUNNING CHILD");
+            sem_post(process_finished_sem);
+            DEBUG_CHILD("FINISHED RUNNING CHILD");printf("\tchild: %d\n", id);
         }
-        printf("child %d\n", id);
-        sem_post(which_process_sem);
         //if this process_t is done, we can kill the actual linux process
         if(process_list[id].finished)
             exit(0);
     }
 }
-
-
 
 void bankers_algorithm(process_t * process_list)
 {
@@ -115,22 +115,23 @@ void bankers_algorithm(process_t * process_list)
             break;
     }
     if(pid == 0){
-        DEBUG("IN PARENT AT BEGINNING");
+        DEBUG_PARENT("IN PARENT AT BEGINNING");
         int shortest = find_shortest(-1), i;
         while(shortest >= 0){
-            printf("shortest: %d\n", shortest);
+            printf("PARENT BEGINNING shortest: %d\n", shortest);
+
             /*let the process know its his turn*/
             sem_wait(which_process_sem);
             *which_process = shortest;
             sem_post(which_process_sem);
 
-            DEBUG("WAITING FOR CURRENT REQUEST PARENT");
+            DEBUG_PARENT("WAITING FOR CURRENT REQUEST");
             /*wait for the child to make it's request*/
             sem_wait(current_request_sem);
-            DEBUG("AFTER WAITING FOR CURRENT REQUEST IN PARENT");
+            DEBUG_PARENT("AFTER WAITING FOR CURRENT REQUEST");
             action_e action = (action_e)current_request[0];
             int temp_shortest;
-            DEBUG("BEFORE PARENT SWITCH");printf("action: %d\n", (int)action);
+            DEBUG_PARENT("BEFORE PARENT SWITCH");printf("action: %d\n", (int)action);
             switch(action){/*determine how to respond to request*/
                 case REQUEST:
                     if(*last_request == shortest){
@@ -164,9 +165,13 @@ void bankers_algorithm(process_t * process_list)
                 case USERESOURCES:
                     break;
             }
+            *which_process = -1;
             sem_post(wait_response_sem);
-            DEBUG("OUTSIDE SWITCH");
+            sem_wait(process_finished_sem);
+            DEBUG_PARENT("OUTSIDE SWITCH");
+            printf("PARENT ENDING: shortest: %d\n", shortest);
         }
+        DEBUG_PARENT("OUTSIDE WHILE");
         //find shortest process 
     }else{
         run_child_process(i); 
@@ -201,8 +206,8 @@ int main(int argc, char * argv [])
     sem_init(which_process_sem, 1, 1);
     sem_init(wait_response_sem, 1, 0);
     sem_init(clock_sem, 1, 1);
+    sem_init(process_finished_sem, 1, 0);
     
-    DEBUG("Before calling bankers");
     bankers_algorithm(process_list);    
 
     free_processes(process_list, num_processes); 

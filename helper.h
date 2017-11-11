@@ -18,7 +18,8 @@ int * current_request = 0;      /*size n + 1, represents either request
                                   or release and the ammount*/
 process_t * process_list;
 
-sem_t *current_request_sem, *wait_response_sem, *clock_sem, *which_process_sem;
+sem_t *current_request_sem, *wait_response_sem, *clock_sem, *which_process_sem,
+      *process_finished_sem;
 
 int num_resources, num_processes;
 
@@ -54,6 +55,8 @@ void make_variables_shared()
                      MAP_SHARED | MAP_ANONYMOUS, -1, 0);
     which_process_sem = mmap(NULL, sizeof(sem_t), PROT_READ | PROT_WRITE, 
                              MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    process_finished_sem = mmap(NULL, sizeof(sem_t), PROT_READ | PROT_WRITE, 
+                             MAP_SHARED | MAP_ANONYMOUS, -1, 0);
 
 }
 
@@ -70,6 +73,7 @@ void dealoc_shared_variables()
     munmap(wait_response_sem, sizeof(sem_t));
     munmap(clock_sem, sizeof(sem_t));
     munmap(which_process_sem, sizeof(sem_t));
+    munmap(process_finished_sem, sizeof(sem_t));
 }
 
 /*  Not a good algorithm, this assumes that there is no other word in the line 
@@ -99,7 +103,7 @@ int find_shortest(int ignore)
     for(i = 0; i < num_processes; i++){
         if(process_list[i].finished)
             continue;
-        if(ignore > 0 && i == ignore)
+        if(ignore >= 0 && i == ignore)
             continue;
         if(shortest == -1){
             shortest = i;
